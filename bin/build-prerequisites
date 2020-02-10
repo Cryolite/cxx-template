@@ -72,7 +72,7 @@ hash -r
   || die_with_runtime_error "$program_name" "Failed to install LLVM."
 hash -r
 
-cat >"$prefix/bin/activate" <<EOF
+cat >"$prefix/bin/activate-prerequisites" <<EOF
 # This file must be used with \`source $prefix/bin/activate' from bash.
 
 if [[ \${BASH_SOURCE-} == \$0 ]]; then
@@ -80,7 +80,7 @@ if [[ \${BASH_SOURCE-} == \$0 ]]; then
     exit 1
 fi
 
-deactivate () {
+deactivate-prerequisites () {
   if [[ -v CXX_TEMPLATE_ACTIVATE_OLD_PATH ]]; then
     export PATH="\$CXX_TEMPLATE_ACTIVATE_OLD_PATH"
     unset CXX_TEMPLATE_ACTIVATE_OLD_PATH
