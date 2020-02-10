@@ -57,20 +57,23 @@ if [[ ! -v prefix ]]; then
 fi
 prefix="$(readlink -m "$prefix")"
 
-# "$CXX_TEMPLATE_ROOT_DIR/ext/binutils/install" --prefix "$prefix" \
-#   || die_with_runtime_error "$program_name" "Failed to install binutils."
-# export LD_LIBRARY_PATH="$prefix/lib64:$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-# export PATH="$prefix/bin${PATH:+:$PATH}"
-# hash -r
-# "$CXX_TEMPLATE_ROOT_DIR/ext/gcc/install" --prefix "$prefix" \
-#   || die_with_runtime_error "$program_name" "Failed to install GCC."
-# hash -r
-# "$CXX_TEMPLATE_ROOT_DIR/ext/cmake/install" --prefix "$prefix" \
-#   || die_with_runtime_error "$program_name" "Failed to install CMake."
-# hash -r
-# "$CXX_TEMPLATE_ROOT_DIR/ext/llvm/install" --prefix "$prefix" \
-#   || die_with_runtime_error "$program_name" "Failed to install LLVM."
-# hash -r
+"$CXX_TEMPLATE_ROOT_DIR/ext/gcc/install" --prefix "$prefix" \
+  || die_with_runtime_error "$program_name" "Failed to install GCC."
+export LD_LIBRARY_PATH="$prefix/lib64:$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export PATH="$prefix/bin${PATH:+:$PATH}"
+hash -r
+"$CXX_TEMPLATE_ROOT_DIR/ext/binutils/install" --prefix "$prefix" \
+  || die_with_runtime_error "$program_name" "Failed to install binutils."
+hash -r
+"$CXX_TEMPLATE_ROOT_DIR/ext/gcc/install" --prefix "$prefix" \
+  || die_with_runtime_error "$program_name" "Failed to install GCC."
+hash -r
+"$CXX_TEMPLATE_ROOT_DIR/ext/cmake/install" --prefix "$prefix" \
+  || die_with_runtime_error "$program_name" "Failed to install CMake."
+hash -r
+"$CXX_TEMPLATE_ROOT_DIR/ext/llvm/install" --prefix "$prefix" \
+  || die_with_runtime_error "$program_name" "Failed to install LLVM."
+hash -r
 
 cat >"$prefix/bin/activate" <<EOF
 # This file must be used with \`source $prefix/bin/activate' from bash.
