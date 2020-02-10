@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir="$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")"
+. "$(readlink -e "$script_dir/../../bin/common.sh")"
+
+program_name=ext/binutils/install
+url_prefix='https://ftpmirror.gnu.org/gnu/binutils'
+
+function print_usage ()
+{
+  cat <<'EOF'
+Usage: install [OPTION]...
+Install binutils.
+
+  --version=<VERSION>        The version of binutils to install. Default to the
+                             latest release version.
+  --prefix=<PREFIX>          Pass `--prefix=<PREFIX>' on to binutils'
+                             `configure' script (mandatory).
+  --source-dir=<DIR>         The path to the source directory. Default to
+                             `<PREFIX>/src/binutils'.
+  -h, --help                 Display this help and exit.
+EOF
+}
+
+if getopt -T; (( $? != 4 )); then
+  die_with_runtime_error "$program_name" "\`getopt' is not an enhanced version."
+fi
+opts="$(getopt -n "$program_name" -l version:,prefix:,source-dir:,help -- h "$@")"
+eval set -- "$opts"
+
+while (( $# > 0 )); do
+  arg="$1"
+  shift
+  case "$arg" in
+  --version)
+    if (( $# == 0 )); then
+      die_with_logic_error "$program_name"
+    fi
+    version="$1"
+    shift
+    ;;
+  --prefix)
+    if (( $# == 0 )); then
+      die_with_logic_error "$program_name"
+    fi
+    prefix="$1"
+    shift
+    ;;
+  --source-dir)
+    if (( $# == 0 )); then
+      die_with_logic_error "$program_name"
+    fi
+    source_dir="$1"
+    shift
+    ;;
+  -h|--help)
+    set +x
+    print_usage
+    exit 0
+    ;;
+  --)
+    if (( $# > 0 )); then
+      die_with_user_error "$program_name" "An invalid argument \`$1'."
+    fi
+    break
+    ;;
+  *)
+    die_with_user_error "$program_name" "An invalid argument \`$arg'."
+    ;;
+  esac
+done
+
+configure_options=()
+
+if [[ ! -v version ]]; then
+  version="$(curl -fLsS "$url_prefix"                                               \
+               | grep -Eo 'binutils-[[:digit:]]+(\.[[:digit:]]+(\.[[:digit:]]+)?)?' \
+               | grep -Eo '[[:digit:]]+(\.[[:digit:]]+(\.[[:digit:]]+)?)?'          \
+               | LANG=C.UTF-8 sort -Vu                                              \
+               | tail -n 1)"                                                        \
+    || die_with_runtime_error "$program_name" "Failed to guess the latest version of binutils."
+  if [[ ! $version =~ ^[[:digit:]]+(\.[[:digit:]]+(\.[[:digit:]]+)?)?$ ]]; then
+    die_with_runtime_error "$program_name" "Failed to guess the latest version of binutils."
+  fi
+fi
+if [[ ! $version =~ ^[[:digit:]]+(\.[[:digit:]]+(\.[[:digit:]]+)?)?$ ]]; then
+  die_with_user_error "$program_name" "$version: An invalid value for the \`--version' option."
+fi
+
+if [[ ! -v prefix ]]; then
+  die_with_user_error "$program_name" "The \`--prefix' option is mandatory."
+fi
+prefix="$(readlink -m "$prefix")"
+configure_options+=("--prefix=$prefix")
+
+if [[ ! -v source_dir ]]; then
+  source_dir="$prefix/src/binutils"
+fi
+source_dir="$(readlink -m "$source_dir")"
+if [[ -e $source_dir ]]; then
+  die_with_runtime_error "$program_name" "$source_dir: A file already exists."
+fi
+
+temp_dir="$(mktemp -d)" \
+  || die_with_runtime_error "$program_name" "Failed to create a temporary directory."
+push_rollback_command "rm -rf \"$temp_dir\""
+
+# EAF1C276A747E9ED86210CBAC3126D3B4AE55E93: dsa1024 2008-10-16 Tristan Gingold <gingold@adacore.com>
+# 3A24BC1E8FB409FA9F14371813FCEF89DD9E3C4F: rsa4096 2017-09-18 Nick Clifton (Chief Binutils Maintainer) <nickc@redhat.com>
+key_ids=(EAF1C276A747E9ED86210CBAC3126D3B4AE55E93  \
+         3A24BC1E8FB409FA9F14371813FCEF89DD9E3C4F)
+key_servers=('hkp://keys.gnupg.net:80'               \
+             'hkp://zimmermann.mayfirst.org:80'      \
+             'hkp://pgp.key-server.io:80'            \
+             'hkp://keyserver.ubuntu.com:80'         \
+             'hkp://p80.pool.sks-keyservers.net:80')
+for key_server in "${key_servers[@]}"; do
+  timeout 30 gpg --homedir "$temp_dir/.gnupg" --batch --keyserver "$key_server" --recv-keys "${key_ids[@]}" && break
+done
+
+tarball_name="binutils-$version.tar.xz"
+tarball_url="$url_prefix/$tarball_name"
+(cd "$temp_dir" && curl -fLsSo "$tarball_name" "$tarball_url") \
+  || die_with_runtime_error "$program_name" "Failed to download \`$tarball_name'."
+(cd "$temp_dir" && curl -fLsSo "$tarball_name.sig" "$tarball_url.sig") \
+  || die_with_runtime_error "$program_name" "Failed to download \`$tarball_name.sig'."
+gpg --homedir "$temp_dir/.gnupg" \
+    --batch \
+    --verify "$temp_dir/$tarball_name.sig" "$temp_dir/$tarball_name" \
+  || die_with_runtime_error "$program_name" "Failed to verify the signature for \`$tarball_name'."
+rm "$temp_dir/$tarball_name.sig"
+
+mkdir -p "$source_dir" \
+  || die_with_runtime_error "$program_name" "$source_dir: Failed to create a directory."
+tar -xf "$temp_dir/$tarball_name" -C "$source_dir" --strip-components=1 \
+  || die_with_runtime_error "$program_name" "Failed to expand \`$tarball_name'."
+rm "$temp_dir/$tarball_name"
+
+build_dir="$temp_dir/build"
+mkdir "$build_dir" || die_with_runtime_error "$program_name" "$build_dir: Failed to create a directory."
+
+(cd "$build_dir" \
+   && "$source_dir/configure" --enable-gold=default ${configure_options[@]+"${configure_options[@]}"}) \
+  || die_with_runtime_error "$program_name" "Failed to \`configure' binutils."
+
+make_options=()
+if [[ ! -v MAKEFLAGS ]]; then
+  # Check whether this script is (directly or indirectly) called from `make`.
+  # If this script is called from `make`, it is expected to control concurrency
+  # of `make`. Otherwise, this script should control concurrency of
+  # `make` as follows.
+  make_options+=(-j -l "$(nproc)")
+fi
+(cd "$build_dir" && make ${make_options[@]+"${make_options[@]}"}) \
+  || die_with_runtime_error "$program_name" "Failed to \`make' binutils."
+
+(cd "$build_dir" && make install-strip) \
+  || die_with_runtime_error "$program_name" "Failed to \`make install-strip' binutils."

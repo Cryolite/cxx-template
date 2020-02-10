@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir="$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")"
+. "$(readlink -e "$script_dir/../../bin/common.sh")"
+
+program_name=ext/cmake/install
+
+function print_usage ()
+{
+  cat <<'EOF'
+Usage: install [OPTION]...
+Install CMake.
+
+  --version=<VERSION>        The version of CMake to install. Default to the
+                             latest release version.
+  --prefix=<PREFIX>          Pass `--prefix=<PREFIX>' on to CMake `bootstrap'
+                             script (mandatory).
+  --source-dir=<DIR>         The path to the source directory. Default to
+                             `<PREFIX>/src/cmake'.
+  -h, --help                 Display this help and exit.
+EOF
+}
+
+if getopt -T; (( $? != 4 )); then
+  die_with_runtime_error "$program_name" "\`getopt' is not an enhanced version."
+fi
+opts="$(getopt -n "$program_name" -l version:,prefix:,source-dir:,help -- h "$@")"
+eval set -- "$opts"
+
+while (( $# > 0 )); do
+  arg="$1"
+  shift
+  case "$arg" in
+  --version)
+    if (( $# == 0 )); then
+      die_with_logic_error "$program_name"
+    fi
+    version="$1"
+    shift
+    ;;
+  --prefix)
+    if (( $# == 0 )); then
+      die_with_logic_error "$program_name"
+    fi
+    prefix="$1"
+    shift
+    ;;
+  --source-dir)
+    if (( $# == 0 )); then
+      die_with_logic_error "$program_name"
+    fi
+    source_dir="$1"
+    shift
+    ;;
+  -h|--help)
+    set +x
+    print_usage
+    exit 0
+    ;;
+  --)
+    if (( $# > 0 )); then
+      die_with_user_error "$program_name" "An invalid argument \`$1'."
+    fi
+    break
+    ;;
+  *)
+    die_with_user_error "$program_name" "An invalid argument \`$arg'."
+    ;;
+  esac
+done
+
+bootstrap_options=()
+
+if [[ ! -v version ]]; then
+  version="$(curl -fLsS 'https://cmake.org/download/'                      \
+               | grep -Eo 'cmake-[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+' \
+               | grep -Eo '[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+'       \
+               | LANG=C.UTF-8 sort -Vu                                     \
+               | tail -n 1)"                                               \
+    || die_with_runtime_error "$program_name" "Failed to guess the latest version of CMake."
+  if [[ ! $version =~ ^[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+$ ]]; then
+    die_with_runtime_error "$program_name" "Failed to guess the latest version of CMake."
+  fi
+fi
+if [[ ! $version =~ ^[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+$ ]]; then
+  die_with_user_error "$program_name" "$version: An invalid value for the \`--version' option."
+fi
+
+if [[ ! -v prefix ]]; then
+  die_with_user_error "$program_name" "The \`--prefix' option is mandatory."
+fi
+prefix="$(readlink -m "$prefix")"
+bootstrap_options+=("--prefix=$prefix")
+
+if [[ ! -v source_dir ]]; then
+  source_dir="$prefix/src/cmake"
+fi
+source_dir="$(readlink -m "$source_dir")"
+if [[ -e $source_dir ]]; then
+  die_with_runtime_error "$program_name" "$source_dir: A file already exists."
+fi
+
+temp_dir="$(mktemp -d)" \
+  || die_with_runtime_error "$program_name" "Failed to create a temporary directory."
+push_rollback_command "rm -rf \"$temp_dir\""
+
+tarball_name="cmake-$version.tar.gz"
+tarball_url="https://github.com/Kitware/CMake/releases/download/v$version/cmake-$version.tar.gz"
+(cd "$temp_dir" && curl -fLsSo "$tarball_name" "$tarball_url") \
+  || die_with_runtime_error "$program_name" "Failed to download \`$tarball_name'."
+
+mkdir -p "$source_dir" \
+  || die_with_runtime_error "$program_name" "$source_dir: Failed to create a directory."
+tar -xf "$temp_dir/$tarball_name" -C "$source_dir" --strip-components=1 \
+  || die_with_runtime_error "$program_name" "Failed to expand \`$tarball_name'."
+rm "$temp_dir/$tarball_name"
+
+build_dir="$temp_dir/build"
+mkdir "$build_dir" || die_with_runtime_error "$program_name" "$build_dir: Failed to create a directory."
+
+bootstrap_options+=(--parallel="$(nproc)" -- '-DCMAKE_BUILD_TYPE:STRING=Release')
+
+(cd "$build_dir" && "$source_dir/bootstrap" ${bootstrap_options[@]+"${bootstrap_options[@]}"}) \
+  || die_with_runtime_error "$program_name" "Failed to \`bootstrap' CMake."
+
+make_options=()
+if [[ ! -v MAKEFLAGS ]]; then
+  # Check whether this script is (directly or indirectly) called from `make`.
+  # If this script is called from `make`, it is expected to control concurrency
+  # of `make`. Otherwise, this script should control concurrency of
+  # `make` as follows.
+  make_options+=(-j -l "$(nproc)")
+fi
+(cd "$build_dir" && make ${make_options[@]+"${make_options[@]}"}) \
+  || die_with_runtime_error "$program_name" "Failed to \`make' CMake."
+
+#(cd "$build_dir" && make test) \
+#  || die_with_runtime_error "$program_name" "Failed to \`make test' CMake."
+
+(cd "$build_dir" && make install) \
+  || die_with_runtime_error "$program_name" "Failed to \`make install' CMake."

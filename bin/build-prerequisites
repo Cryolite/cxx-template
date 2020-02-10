@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir="$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")"
+. "$(readlink -e "$script_dir/common.sh")"
+
+program_name=bin/build-prerequisites
+
+function print_usage ()
+{
+  cat <<'EOF'
+Usage: bin/build-prerequisites [OPTION]...
+Build prerequisite tools and libraries.
+
+  --prefix=<PREFIX>          The prefix of the install location (mandatory).
+  -h, --help                 Display this help and exit.
+EOF
+}
+
+if getopt -T; (( $? != 4 )); then
+  die_with_runtime_error "$program_name" "\`getopt' is not an enhanced version."
+fi
+opts="$(getopt -n "$program_name" -l prefix:,help -- h "$@")"
+eval set -- "$opts"
+
+while (( $# > 0 )); do
+  arg="$1"
+  shift
+  case "$arg" in
+  --prefix)
+    if (( $# == 0 )); then
+      die_with_logic_error "$program_name"
+    fi
+    prefix="$1"
+    shift
+    ;;
+  -h|--help)
+    set +x
+    print_usage
+    exit 0
+    ;;
+  --)
+    if (( $# > 0 )); then
+      die_with_user_error "$program_name" "An invalid argument \`$1'."
+    fi
+    break
+    ;;
+  *)
+    die_with_user_error "$program_name" "An invalid argument \`$arg'."
+    ;;
+  esac
+done
+
+if [[ ! -v prefix ]]; then
+  die_with_user_error "$program_name" "The \`--prefix' option is mandatory."
+fi
+prefix="$(readlink -m "$prefix")"
+
+# "$CXX_TEMPLATE_ROOT_DIR/ext/binutils/install" --prefix "$prefix" \
+#   || die_with_runtime_error "$program_name" "Failed to install binutils."
+# export LD_LIBRARY_PATH="$prefix/lib64:$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# export PATH="$prefix/bin${PATH:+:$PATH}"
+# hash -r
+# "$CXX_TEMPLATE_ROOT_DIR/ext/gcc/install" --prefix "$prefix" \
+#   || die_with_runtime_error "$program_name" "Failed to install GCC."
+# hash -r
+# "$CXX_TEMPLATE_ROOT_DIR/ext/cmake/install" --prefix "$prefix" \
+#   || die_with_runtime_error "$program_name" "Failed to install CMake."
+# hash -r
+# "$CXX_TEMPLATE_ROOT_DIR/ext/llvm/install" --prefix "$prefix" \
+#   || die_with_runtime_error "$program_name" "Failed to install LLVM."
+# hash -r
+
+cat >"$prefix/bin/activate" <<EOF
+# This file must be used with \`source $prefix/bin/activate' from bash.
+
+if [[ \${BASH_SOURCE-} == \$0 ]]; then
+    echo "You must source this script as follows: \\\$ source \$0" >&2
+    exit 1
+fi
+
+deactivate () {
+  if [[ -v CXX_TEMPLATE_ACTIVATE_OLD_PATH ]]; then
+    export PATH="\$CXX_TEMPLATE_ACTIVATE_OLD_PATH"
+    unset CXX_TEMPLATE_ACTIVATE_OLD_PATH
+  fi
+
+  if [[ -v CXX_TEMPLATE_ACTIVATE_OLD_LD_LIBRARY_PATH ]]; then
+    export LD_LIBRARY_PATH="\$CXX_TEMPLATE_ACTIVATE_OLD_LD_LIBRARY_PATH"
+    unset CXX_TEMPLATE_ACTIVATE_OLD_LD_LIBRARY_PATH
+  else
+    if [[ -v LD_LIBRARY_PATH ]]; then
+      unset LD_LIBRARY_PATH
+    fi
+  fi
+
+  unset -f deactivate
+  hash -r
+}
+
+if [[ -v LD_LIBRARY_PATH ]]; then
+  CXX_TEMPLATE_ACTIVATE_OLD_LD_LIBRARY_PATH="\$LD_LIBRARY_PATH"
+fi
+export LD_LIBRARY_PATH="$prefix/lib64:$prefix/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+
+if [[ -v PATH ]]; then
+  CXX_TEMPLATE_ACTIVATE_OLD_PATH="\$PATH"
+fi
+export PATH="$prefix/bin\${PATH:+:\$PATH}"
+EOF

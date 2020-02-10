@@ -3,10 +3,6 @@ project(cxx-template)
 
 enable_testing()
 
-if(CMAKE_BUILD_TYPE STREQUAL "")
-  set(CMAKE_BUILD_TYPE Debug)
-endif()
-
 message(STATUS
   "CMAKE_C_COMPILER=${CMAKE_C_COMPILER}")
 message(STATUS
@@ -16,16 +12,22 @@ set(CMAKE_CXX_STANDARD 20)
 message(STATUS
   "CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
 
-if((CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    OR (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"))
+if((CMAKE_CXX_COMPILER_ID STREQUAL "Clang") OR (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"))
   add_compile_options(-Werror -Wall)
 else()
   message(FATAL_ERROR
     "An unsupported C++ compiler: CMAKE_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}.")
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "")
+  set(CMAKE_BUILD_TYPE Debug)
+endif()
+
 message(STATUS
   "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+
+message(STATUS
+  "CXX_TEMPLATE_CXX_STDLIB=${CXX_TEMPLATE_CXX_STDLIB}")
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   if(CXX_TEMPLATE_CXX_STDLIB STREQUAL "libstdc++")
@@ -76,8 +78,7 @@ else()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  if((CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-      OR (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"))
+  if((CMAKE_CXX_COMPILER_ID STREQUAL "Clang") OR (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"))
     add_compile_options(-pthread)
     add_link_options(-pthread)
   else()

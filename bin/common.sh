@@ -1,9 +1,9 @@
 # This Bash file is not designed to be called directly, but rather is read by
 # `source` Bash builtin command in the very beginning of another Bash script.
 
-CORIO_ROOT_DIR="$(readlink -e "${BASH_SOURCE[0]}")"
-CORIO_ROOT_DIR="$(dirname "$CORIO_ROOT_DIR")"
-CORIO_ROOT_DIR="$(readlink -e "$CORIO_ROOT_DIR/..")"
+CXX_TEMPLATE_ROOT_DIR="$(readlink -e "${BASH_SOURCE[0]}")"
+CXX_TEMPLATE_ROOT_DIR="$(dirname "$CXX_TEMPLATE_ROOT_DIR")"
+CXX_TEMPLATE_ROOT_DIR="$(readlink -e "$CXX_TEMPLATE_ROOT_DIR/..")"
 
 PS4='+${BASH_SOURCE[0]}:$LINENO: '
 if [[ -t 1 ]] && type -t tput >/dev/null; then
@@ -14,31 +14,31 @@ if [[ -t 1 ]] && type -t tput >/dev/null; then
   fi
 fi
 
-new_args=()
+__new_args=()
 while (( $# > 0 )); do
   arg="$1"
   shift
   case "$arg" in
   --debug)
-    debug=yes
-    new_args+=("$@")
+    __debug=yes
+    __new_args+=("$@")
     break
     ;;
   --)
-    new_args+=(-- "$@")
+    __new_args+=(-- "$@")
     break
     ;;
   *)
-    new_args+=("$arg")
+    __new_args+=("$arg")
     ;;
   esac
 done
-set -- ${new_args[@]+"${new_args[@]}"}
-unset new_args
-if [[ ${debug-no} == yes || ${VERBOSE+DEFINED} == DEFINED ]]; then
+set -- ${__new_args[@]+"${__new_args[@]}"}
+unset __new_args
+if [[ ${__debug-no} == yes || -v VERBOSE ]]; then
   set -x
 fi
-unset debug
+unset __debug
 
 function print_error_message ()
 {
@@ -75,19 +75,19 @@ function die_with_runtime_error ()
   exit 1
 }
 
-rollback_stack=()
+__rollback_stack=()
 
 function push_rollback_command ()
 {
-  rollback_stack+=("$1")
+  __rollback_stack+=("$1")
 }
 
 function rollback ()
 {
-  for (( i = ${#rollback_stack[@]} - 1; i >= 0; --i )); do
-    eval "${rollback_stack[$i]}"
+  for (( i = ${#__rollback_stack[@]} - 1; i >= 0; --i )); do
+    eval "${__rollback_stack[$i]}"
   done
-  rollback_stack=()
+  __rollback_stack=()
 }
 
 trap rollback EXIT
