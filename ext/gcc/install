@@ -7,6 +7,7 @@ script_dir="$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")"
 
 program_name=ext/gcc/install
 url_prefix='https://ftpmirror.gnu.org/gcc'
+download_prerequisites_base_url='http://ftp.tsukuba.wide.ad.jp/software/gcc/infrastructure/'
 
 function print_usage ()
 {
@@ -146,6 +147,9 @@ tar -xf "$temp_dir/$tarball_name" -C "$source_dir" --strip-components=1 \
   || die_with_runtime_error "$program_name" "Failed to expand \`$tarball_name'."
 rm "$temp_dir/$tarball_name"
 
+if [[ -v download_prerequisites_base_url ]]; then
+  sed -i -e "s@^[[:space:]]*base_url=.*\$@base_url='$download_prerequisites_base_url'@" "$source_dir/contrib/download_prerequisites"
+fi
 (cd "$source_dir" && timeout 60 ./contrib/download_prerequisites) \
   || die_with_runtime_error "$program_name" "Failed to download the prerequisites to build GCC."
 rm "$source_dir"/*.tar.*
